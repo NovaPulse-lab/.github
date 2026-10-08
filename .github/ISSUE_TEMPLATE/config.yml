@@ -1,0 +1,8 @@
+# Jira (projet NOVA) est la source de vérité : les issues GitHub sont créées
+# automatiquement depuis Jira. La création manuelle reste possible via les
+# formulaires ci-dessous, à condition de référencer le ticket Jira.
+blank_issues_enabled: false
+contact_links:
+  - name: Créer le ticket dans Jira (recommandé)
+    url: https://ab-labs.atlassian.net/jira/software/projects/NOVA/boards
+    about: Tout travail commence par un ticket NOVA ; l'issue GitHub est générée automatiquement.

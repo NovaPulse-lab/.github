@@ -1,0 +1,167 @@
+# Reusable workflow: moves the Jira issue referenced by a branch or pull request
+# forward in the NOVA workflow.
+#
+# Why GitHub Actions rather than Jira Automation: the Jira Free plan caps
+# automation at ~100 rule runs per month. Status changes happen several times
+# per ticket, so they are driven from GitHub (Actions minutes) and Jira
+# Automation is kept for the single "create GitHub issue" rule.
+#
+# Event → target status
+#   create (branch)                         → En cours
+#   pull_request opened/reopened (draft)    → En cours
+#   pull_request opened/reopened/ready      → Revue en cours
+#   pull_request closed + merged            → En recette
+#
+# Transitions are forward-only: an issue already further along the workflow
+# is never moved back by an automated event.
+name: Jira sync (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      jira-base-url:
+        description: Base URL of the Jira Cloud site.
+        type: string
+        default: https://ab-labs.atlassian.net
+      workflow-order:
+        description: Comma-separated status names, in workflow order.
+        type: string
+        default: "À faire,En cours,Revue en cours,En recette,Terminé(e)"
+      status-in-progress:
+        type: string
+        default: En cours
+      status-review:
+        type: string
+        default: Revue en cours
+      status-testing:
+        type: string
+        default: En recette
+    secrets:
+      JIRA_USER_EMAIL:
+        required: true
+      JIRA_API_TOKEN:
+        required: true
+
+permissions: {}
+
+jobs:
+  transition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # 1. Resolve the Jira key and the target status from the event.
+      #    Untrusted values (branch name, PR title) are passed through env
+      #    variables and never interpolated into the script (script injection).
+      - name: Resolve Jira key and target status
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.event.ref_type }}
+          CREATED_REF: ${{ github.event.ref }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          STATUS_IN_PROGRESS: ${{ inputs.status-in-progress }}
+          STATUS_REVIEW: ${{ inputs.status-review }}
+          STATUS_TESTING: ${{ inputs.status-testing }}
+        run: |
+          set -euo pipefail
+
+          extract_key() {
+            grep -oiE 'NOVA-[0-9]+' <<<"$1" | head -n1 | tr '[:lower:]' '[:upper:]' || true
+          }
+
+          key=""
+          target=""
+          case "$EVENT_NAME" in
+            create)
+              if [[ "$REF_TYPE" == "branch" ]]; then
+                key="$(extract_key "$CREATED_REF")"
+                target="$STATUS_IN_PROGRESS"
+              fi
+              ;;
+            pull_request)
+              key="$(extract_key "$PR_HEAD_REF")"
+              [[ -z "$key" ]] && key="$(extract_key "$PR_TITLE")"
+              case "$PR_ACTION" in
+                opened|reopened|ready_for_review)
+                  if [[ "$PR_DRAFT" == "true" ]]; then target="$STATUS_IN_PROGRESS"; else target="$STATUS_REVIEW"; fi
+                  ;;
+                closed)
+                  [[ "$PR_MERGED" == "true" ]] && target="$STATUS_TESTING"
+                  ;;
+              esac
+              ;;
+          esac
+
+          if [[ -z "$key" || -z "$target" ]]; then
+            echo "::notice::No Jira transition for this event (key='${key}', target='${target}')."
+          fi
+          {
+            echo "key=${key}"
+            echo "target=${target}"
+          } >> "$GITHUB_OUTPUT"
+
+      # 2. Apply the transition through the Jira REST API (v3).
+      - name: Transition Jira issue
+        if: steps.resolve.outputs.key != '' && steps.resolve.outputs.target != ''
+        env:
+          JIRA_BASE_URL: ${{ inputs.jira-base-url }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          WORKFLOW_ORDER: ${{ inputs.workflow-order }}
+          ISSUE_KEY: ${{ steps.resolve.outputs.key }}
+          TARGET_STATUS: ${{ steps.resolve.outputs.target }}
+        run: |
+          set -euo pipefail
+
+          jira() {
+            curl --silent --show-error --fail-with-body --max-time 20 \
+              --user "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+              --header 'Accept: application/json' \
+              --header 'Content-Type: application/json' \
+              "$@"
+          }
+
+          status_index() {
+            local wanted="${1,,}" i=0
+            IFS=',' read -ra statuses <<<"$WORKFLOW_ORDER"
+            for s in "${statuses[@]}"; do
+              [[ "${s,,}" == "$wanted" ]] && { echo "$i"; return; }
+              i=$((i + 1))
+            done
+            echo -1
+          }
+
+          if ! issue_json="$(jira "${JIRA_BASE_URL}/rest/api/3/issue/${ISSUE_KEY}?fields=status")"; then
+            echo "::warning::Jira issue ${ISSUE_KEY} not found or not readable; nothing done."
+            exit 0
+          fi
+          current="$(jq -r '.fields.status.name' <<<"$issue_json")"
+
+          current_idx="$(status_index "$current")"
+          target_idx="$(status_index "$TARGET_STATUS")"
+          if [[ "$target_idx" -lt 0 ]]; then
+            echo "::error::Target status '${TARGET_STATUS}' is not in workflow-order."
+            exit 1
+          fi
+          if [[ "$current_idx" -ge "$target_idx" ]]; then
+            echo "::notice::${ISSUE_KEY} is already '${current}'; forward-only rule, nothing done."
+            exit 0
+          fi
+
+          transition_id="$(jira "${JIRA_BASE_URL}/rest/api/3/issue/${ISSUE_KEY}/transitions" \
+            | jq -r --arg t "$TARGET_STATUS" \
+                '.transitions[] | select((.to.name | ascii_downcase) == ($t | ascii_downcase)) | .id' \
+            | head -n1)"
+          if [[ -z "$transition_id" ]]; then
+            echo "::error::No transition from '${current}' to '${TARGET_STATUS}' on ${ISSUE_KEY}."
+            exit 1
+          fi
+
+          jira --request POST \
+            --data "$(jq -n --arg id "$transition_id" '{transition: {id: $id}}')" \
+            "${JIRA_BASE_URL}/rest/api/3/issue/${ISSUE_KEY}/transitions" > /dev/null
+          echo "::notice::${ISSUE_KEY}: '${current}' → '${TARGET_STATUS}'."

@@ -1,0 +1,88 @@
+name: Anomalie
+description: Fiche de consignation d'une anomalie (copie de la fiche Bug Jira).
+title: "[NOVA-XXX] "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Renseignez de quoi **reproduire** l'anomalie sans échange supplémentaire.
+        Aucune donnée patrimoniale réelle ni donnée personnelle dans cette fiche (RGPD).
+  - type: input
+    id: jira
+    attributes:
+      label: Ticket Jira
+      description: Clé du ticket Bug correspondant.
+      placeholder: NOVA-123
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Gravité
+      description: Niveaux de service du CDC (§4.3).
+      options:
+        - "P1 — critique : sécurité ou panne totale (prise en charge < 4 h ouvrées)"
+        - "P2 — majeur : arrêt des flux boursiers (prise en charge < 1 j ouvré)"
+        - "P3 — mineur : anomalie cosmétique (résolution au sprint suivant)"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environnement
+      options: [Développement local, Préproduction, Production]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version concernée
+      placeholder: v0.3.1 ou SHA du commit
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risque du référentiel lié
+      options:
+        - "Aucun"
+        - "R1 — Fuite de données"
+        - "R2 — Erreur d'arrondi monétaire"
+        - "R3 — Indisponibilité / quotas API"
+        - "R4 — Rejet par les conseillers"
+        - "R5 — Corruption lors de la migration"
+        - "R6 — Non-conformité réglementaire"
+        - "R7 — Interruption / perte de données"
+        - "R8 — Dérive délais / périmètre"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes de reproduction
+      placeholder: |
+        1. Se connecter en tant que conseiller
+        2. Ouvrir le portefeuille …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Résultat attendu
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Résultat obtenu
+    validations:
+      required: true
+  - type: input
+    id: sentry
+    attributes:
+      label: Lien Sentry (si disponible)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux / captures
+      render: text

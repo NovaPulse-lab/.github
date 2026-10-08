@@ -1,0 +1,43 @@
+# Reusable workflow: enforces the contribution conventions on pull requests.
+#
+# - Title follows Conventional Commits and references a Jira key, because
+#   PRs are squash-merged: the title becomes the commit on main, which feeds
+#   the changelog and links the commit to Jira through the GitHub for Jira app.
+# - Branch name follows <type>/NOVA-<n>-<slug>, which lets the Jira sync
+#   workflow find the issue as soon as the branch is created.
+#
+# Branch protection is not available for private repositories on GitHub Free,
+# so this check cannot be made mandatory; it still fails visibly on the PR.
+name: PR lint (reusable)
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check PR title and branch name
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          errors=0
+
+          types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security'
+          title_re="^(${types})(\([a-z0-9-]+\))?!?: .+ \(NOVA-[0-9]+\)$"
+          branch_re="^(${types})/NOVA-[0-9]+-[a-z0-9-]+$"
+
+          if [[ ! "$PR_TITLE" =~ $title_re ]]; then
+            echo "::error title=PR title::'${PR_TITLE}' must look like 'feat(auth): add TOTP enrollment (NOVA-12)'."
+            errors=1
+          fi
+          if [[ ! "$PR_HEAD_REF" =~ $branch_re ]]; then
+            echo "::error title=Branch name::'${PR_HEAD_REF}' must look like 'feat/NOVA-12-totp-enrollment'."
+            errors=1
+          fi
+          exit "$errors"

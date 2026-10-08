@@ -1,0 +1,29 @@
+name: Tâche technique
+description: Tâche rattachée à une story Jira (création manuelle de secours).
+title: "[NOVA-XXX] "
+labels: ["type:task"]
+body:
+  - type: input
+    id: jira
+    attributes:
+      label: Ticket Jira
+      placeholder: NOVA-123
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Objectif
+      description: Ce que la tâche livre, en une ou deux phrases.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Définition de « terminé »
+      value: |
+        - [ ] Tests unitaires ajoutés ou mis à jour
+        - [ ] CI au vert
+        - [ ] Entrée CHANGELOG
+        - [ ] Documentation mise à jour (si impact)
+        - [ ] Accessibilité vérifiée (si écran)
