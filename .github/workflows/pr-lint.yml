@@ -1,10 +1,12 @@
 # Reusable workflow: enforces the contribution conventions on pull requests.
 #
-# - Title follows Conventional Commits and references a Jira key, because
-#   PRs are squash-merged: the title becomes the commit on main, which feeds
-#   the changelog and links the commit to Jira through the GitHub for Jira app.
-# - Branch name follows <type>/NOVA-<n>-<slug>, which lets the Jira sync
-#   workflow find the issue as soon as the branch is created.
+# Two kinds of pull requests (NOVA-52):
+# - Work PRs, into dev: title follows Conventional Commits and references a
+#   Jira key, because PRs are squash-merged and the title becomes the commit on
+#   dev (changelog, link to Jira through the GitHub for Jira app). Branch name
+#   follows <type>/NOVA-<n>-<slug>, which lets the Jira sync workflow find the
+#   issue as soon as the branch is created.
+# - Release PRs, into main: only from dev, titled "chore(release): vX.Y.Z".
 #
 # Branch protection is not available for private repositories on GitHub Free,
 # so this check cannot be made mandatory; it still fails visibly on the PR.
@@ -24,10 +26,25 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
           errors=0
 
+          # 1. Release PR: dev → main only
+          if [[ "$PR_BASE_REF" == "main" ]]; then
+            if [[ "$PR_HEAD_REF" != "dev" ]]; then
+              echo "::error title=Target branch::Only dev can be merged into main; target dev instead."
+              errors=1
+            fi
+            if [[ ! "$PR_TITLE" =~ ^chore\(release\):\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error title=PR title::A release PR must be titled 'chore(release): vX.Y.Z'."
+              errors=1
+            fi
+            exit "$errors"
+          fi
+
+          # 2. Work PR into dev
           types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security'
           title_re="^(${types})(\([a-z0-9-]+\))?!?: .+ \(NOVA-[0-9]+\)$"
           branch_re="^(${types})/NOVA-[0-9]+-[a-z0-9-]+$"
