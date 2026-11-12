@@ -6,6 +6,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions
 
 ## [Unreleased]
 
+### Changed
+
+- Flux de branches `dev` → `main` : `dev` devient la branche par défaut et
+  d'intégration ; `pr-lint` n'accepte vers `main` que les PR de version
+  depuis `dev`, titrées `chore(release): vX.Y.Z` ; CONTRIBUTING mis à jour
+  (NOVA-52).
+
 ## [0.1.0] - 2026-10-08
 
 ### Added

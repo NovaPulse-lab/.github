@@ -9,11 +9,12 @@ code de la stack concernée).
 ```
 Jira (NOVA-123)
   └─ issue GitHub créée automatiquement : [NOVA-123] …
-       └─ branche  feat/NOVA-123-totp-enrollment   → Jira passe « En cours »
-            └─ PR  feat(auth): add TOTP enrollment (NOVA-123)
+       └─ branche  feat/NOVA-123-totp-enrollment (depuis dev) → Jira passe « En cours »
+            └─ PR vers dev  feat(auth): add TOTP enrollment (NOVA-123)
                  ├─ ouverte (non brouillon)        → Jira passe « Revue en cours »
-                 └─ fusionnée (squash)             → Jira passe « En recette »
+                 └─ fusionnée (squash) dans dev    → Jira passe « En recette »
                                                      puis « Terminé(e) » après recette
+dev ──── PR de version  chore(release): v0.2.0 ────► main
 ```
 
 - **Jira est la source de vérité.** On ne crée pas d'issue GitHub sans ticket
@@ -24,27 +25,37 @@ Jira (NOVA-123)
 
 ## 2. Branches
 
-`main` est toujours déployable. Tout changement passe par une branche courte
-et une pull request.
+| Branche | Rôle | Reçoit | Environnement |
+|---|---|---|---|
+| `dev` | Intégration, **branche par défaut** | Les PR de travail, fusionnées en squash | Préproduction |
+| `main` | Versions validées, toujours déployable | Uniquement les PR de version depuis `dev` | Production |
+| `<type>/NOVA-<n>-<slug>` | Travail sur un ticket | — | Développement local |
 
 | Élément | Format | Exemple |
 |---|---|---|
-| Branche | `<type>/NOVA-<n>-<slug>` | `fix/NOVA-42-rounding-dividends` |
-| Titre de PR | `<type>(<scope>): <résumé> (NOVA-<n>)` | `fix(transactions): round dividends with bcmath (NOVA-42)` |
+| Branche de travail | `<type>/NOVA-<n>-<slug>`, créée depuis `dev` | `fix/NOVA-42-rounding-dividends` |
+| Titre de PR de travail (vers `dev`) | `<type>(<scope>): <résumé> (NOVA-<n>)` | `fix(transactions): round dividends with bcmath (NOVA-42)` |
+| Titre de PR de version (`dev` → `main`) | `chore(release): vX.Y.Z` | `chore(release): v0.2.0` |
 
 Types autorisés : `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
 `build`, `ci`, `chore`, `revert`, `security`.
 
+**PR de version.** Fusionnée en *merge commit* (pas en squash) pour conserver
+sur `main` l'historique des commits de `dev`. Avant de l'ouvrir : section
+`[Unreleased]` du CHANGELOG renommée en `[X.Y.Z] - AAAA-MM-JJ`. Après la
+fusion : étiquette `vX.Y.Z` sur `main`.
+
 > Les dépôts sont privés en offre GitHub Free : la protection de branche n'est
-> pas disponible. L'interdiction de pousser directement sur `main` est donc
-> une **règle d'équipe**, contrôlée par le workflow `PR lint` et la revue.
+> pas disponible. L'interdiction de pousser directement sur `dev` et `main`
+> est donc une **règle d'équipe**, contrôlée par le workflow `PR lint` (qui
+> refuse toute PR vers `main` ne venant pas de `dev`) et par la revue.
 
 ## 3. Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/fr/) dans les
-branches, en anglais. Les PR sont fusionnées en **squash** : le titre de la PR
-devient le commit sur `main`, d'où le format strict du titre (il alimente le
-CHANGELOG et le lien avec Jira).
+branches, en anglais. Les PR de travail sont fusionnées en **squash** : le
+titre de la PR devient le commit sur `dev`, d'où le format strict du titre (il
+alimente le CHANGELOG et le lien avec Jira).
 
 ```
 feat(portfolio): add asset allocation chart
